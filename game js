@@ -1,0 +1,142 @@
+const canvas = document.getElementById('dungeonCanvas');
+const ctx = canvas.getContext('2d');
+canvas.width = 1360; canvas.height = 768;
+
+let player = { x: 100, y: 100, hp: 100, stamina: 100, floor: 1, speed: 4, item: null, invisible: false };
+let walls = [], enemies = [], items = [], exit = null, boss = null;
+let keys = {}, gameActive = false, isDashing = false;
+
+const ITEM_TYPES = [
+    { name: '醫療包', color: '#ff4444', action: () => { player.hp = Math.min(100, player.hp + 40); } },
+    { name: '隱身藥水', color: '#ffffff', action: () => { player.invisible = true; setTimeout(() => player.invisible = false, 4000); } },
+    { name: '能量飲料', color: '#ffff00', action: () => { player.stamina = 100; player.speed = 7; setTimeout(()=>player.speed=4, 5000); } }
+];
+
+function resetDungeonGame() {
+    player = { x: 100, y: 100, hp: 100, stamina: 100, floor: 1, speed: 4, item: null, invisible: false };
+    walls = []; enemies = []; items = []; exit = null; boss = null;
+    gameActive = false; isDashing = false;
+    document.getElementById('itemSlot').innerText = "無";
+    document.getElementById('startMenu').style.display = 'flex';
+    updateUI();
+}
+
+function initFloor() {
+    walls = []; enemies = []; items = []; boss = null;
+    if (player.floor === 5) {
+        walls = [{x: 400, y: 200, w: 40, h: 40}, {x: 900, y: 200, w: 40, h: 40}, {x: 400, y: 500, w: 40, h: 40}, {x: 900, y: 500, w: 40, h: 40}];
+        boss = { x: 680, y: 384, hp: 5, angle: 0, shockwaveRadius: 0, size: 80 };
+        exit = null;
+    } else {
+        for (let i = 0; i < 15; i++) walls.push({ x: Math.random()*1100 + 100, y: Math.random()*500 + 100, w: 80, h: 80 });
+        for (let i = 0; i < 3 + player.floor; i++) {
+            enemies.push({ 
+                x: Math.random()*1200+100, y: Math.random()*600+100, angle: Math.random()*Math.PI*2, 
+                state: 'patrol', speed: 0.8 + (player.floor * 0.1) // 巡邏移速調慢
+            });
+        }
+        for (let i = 0; i < 2; i++) items.push({ x: Math.random()*1200+100, y: Math.random()*600+100, type: ITEM_TYPES[Math.floor(Math.random()*ITEM_TYPES.length)] });
+        exit = { x: 1250, y: 650, size: 50 };
+    }
+}
+
+function update() {
+    if (!gameActive) return;
+    let nx = player.x, ny = player.y;
+    if (keys['w']) ny -= player.speed; if (keys['s']) ny += player.speed;
+    if (keys['a']) nx -= player.speed; if (keys['d']) nx += player.speed;
+    if (!walls.some(w => nx < w.x+w.w && nx+24 > w.x && ny < w.y+w.h && ny+24 > w.y)) { player.x = nx; player.y = ny; }
+
+    if (boss) {
+        const aToP = Math.atan2(player.y - boss.y, player.x - boss.x);
+        boss.angle += (aToP - boss.angle) * 0.05;
+        boss.shockwaveRadius += 4; if (boss.shockwaveRadius > 400) boss.shockwaveRadius = 0;
+        const dist = Math.hypot(player.x - boss.x, player.y - boss.y);
+        if (Math.abs(dist - boss.shockwaveRadius) < 10 && !isDashing) player.hp -= 0.5;
+    }
+
+    enemies.forEach(en => {
+        const dist = Math.hypot(player.x - en.x, player.y - en.y);
+        const aToP = Math.atan2(player.y - en.y, player.x - en.x);
+        const aDiff = Math.abs(((en.angle - aToP + Math.PI) % (Math.PI * 2)) - Math.PI);
+        if (!player.invisible && dist < 250 && aDiff < 0.6) en.state = 'chase';
+        if (en.state === 'chase') {
+            en.angle = aToP; en.x += Math.cos(en.angle) * 2.2; en.y += Math.sin(en.angle) * 2.2; // 追逐移速調慢
+            if (dist < 25) player.hp -= 0.8;
+        } else {
+            en.x += Math.cos(en.angle) * en.speed; en.y += Math.sin(en.angle) * en.speed;
+            if (en.x < 0 || en.x > 1360 || en.y < 0 || en.y > 768) en.angle += Math.PI;
+            en.angle += 0.01;
+        }
+    });
+
+    if (player.hp <= 0) { gameActive = false; alert("生存結束 XO 失敗 QQ"); resetDungeonGame(); return; }
+
+    items.forEach((it, idx) => { if (Math.hypot(player.x - it.x, player.y - it.y) < 30) { player.item = it.type; document.getElementById('itemSlot').innerText = it.type.name; items.splice(idx, 1); } });
+    if (keys[' '] && player.stamina >= 30 && !isDashing) { isDashing = true; player.stamina -= 30; player.speed *= 2.5; setTimeout(() => { player.speed /= 2.5; isDashing = false; }, 200); }
+    player.stamina = Math.min(100, player.stamina + 0.4);
+
+    if (exit && Math.hypot(player.x - exit.x, player.y - exit.y) < 50) {
+        if (player.floor >= 5 && !boss) { gameActive = false; alert("生存結束 XD 成功 !!!!"); resetDungeonGame(); return; }
+        else { player.floor++; player.x=100; player.y=100; initFloor(); }
+    }
+    updateUI();
+}
+
+function draw() {
+    ctx.fillStyle = "#111"; ctx.fillRect(0, 0, 1360, 768);
+    if (exit) { ctx.fillStyle = "#0f0"; ctx.fillRect(exit.x, exit.y, exit.size, exit.size); }
+    ctx.fillStyle = "#333"; walls.forEach(w => ctx.fillRect(w.x, w.y, w.w, w.h));
+    items.forEach(it => { ctx.fillStyle = it.type.color; ctx.beginPath(); ctx.arc(it.x, it.y, 8, 0, Math.PI*2); ctx.fill(); });
+
+    if (boss) {
+        ctx.strokeStyle = "rgba(255,0,0,"+(1-boss.shockwaveRadius/400)+")";
+        ctx.beginPath(); ctx.arc(boss.x, boss.y, boss.shockwaveRadius, 0, Math.PI*2); ctx.stroke();
+        ctx.save(); ctx.translate(boss.x, boss.y); ctx.rotate(boss.angle);
+        ctx.fillStyle = "#444"; ctx.fillRect(-40,-40,80,80);
+        ctx.fillStyle = "#0ff"; ctx.beginPath(); ctx.arc(-40,0,15,0,Math.PI*2); ctx.fill(); 
+        ctx.restore();
+    }
+
+    enemies.forEach(en => {
+        ctx.save(); ctx.translate(en.x, en.y); ctx.rotate(en.angle);
+        ctx.fillStyle = en.state==='chase'?"rgba(255,0,0,0.2)":"rgba(255,255,0,0.1)";
+        ctx.beginPath(); ctx.moveTo(0,0); ctx.arc(0,0,250,-0.6,0.6); ctx.fill();
+        ctx.fillStyle = en.state==='chase'?"#f00":"#ff0"; ctx.fillRect(-10,-10,20,20);
+        ctx.restore();
+    });
+
+    ctx.globalAlpha = player.invisible ? 0.3 : 1.0;
+    ctx.fillStyle = "#0af"; ctx.fillRect(player.x, player.y, 24, 24);
+    ctx.globalAlpha = 1.0;
+    let g = ctx.createRadialGradient(player.x+12,player.y+12,50, player.x+12,player.y+12, player.invisible?150:300);
+    g.addColorStop(0,'rgba(0,0,0,0)'); g.addColorStop(1,'rgba(0,0,0,0.92)');
+    ctx.fillStyle = g; ctx.fillRect(0,0,1360,768);
+    requestAnimationFrame(() => { update(); draw(); });
+}
+
+canvas.addEventListener('mousedown', () => {
+    if (boss) {
+        const dist = Math.hypot(player.x - boss.x, player.y - boss.y);
+        const ang = Math.atan2(player.y - boss.y, player.x - boss.x);
+        if (dist < 100 && Math.abs(((boss.angle-ang+Math.PI)%(Math.PI*2))-Math.PI) > 2.2) { boss.hp--; if(boss.hp<=0) { boss = null; exit = {x:1250,y:650,size:50}; } }
+    }
+    enemies.forEach((en, i) => {
+        const dist = Math.hypot(player.x - en.x, player.y - en.y);
+        const ang = Math.atan2(player.y - en.y, player.x - en.x);
+        if (dist < 60 && Math.abs(((en.angle-ang+Math.PI)%(Math.PI*2))-Math.PI) > 2.0) { enemies.splice(i, 1); player.stamina = Math.min(100, player.stamina + 20); }
+    });
+});
+
+window.addEventListener('keydown', e => {
+    keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === 'e' && player.item) { player.item.action(); player.item = null; document.getElementById('itemSlot').innerText = "無"; }
+});
+window.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+function updateUI() {
+    document.getElementById('hp').innerText = Math.max(0, Math.ceil(player.hp));
+    document.getElementById('stamina').innerText = Math.floor(player.stamina);
+    document.getElementById('floor').innerText = player.floor;
+}
+function startGame() { document.getElementById('startMenu').style.display='none'; gameActive=true; initFloor(); draw(); }
