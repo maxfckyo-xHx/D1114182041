@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <title>像素地牢：潛行者</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="game-container">
+        <div id="startMenu" class="modal">
+            <div class="modal-content">
+                <h1 style="color: #ff4500; font-size: 3.5rem; text-shadow: 4px 4px #440000;">像素地牢</h1>
+                <p style="letter-spacing: 3px;">DARK DUNGEON STALKER</p>
+                <button class="btn" onclick="startGame()">踏入黑暗</button>
+            </div>
+        </div>
+
+        <div class="ui-bar">
+            <div class="stat">生命: <span id="hp">100</span></div>
+            <div class="stat">體力: <span id="stamina">100</span></div>
+            <div class="stat" style="color: #00ffff;">道具: <span id="itemSlot">無</span></div>
+            <div class="stat" style="color: #00ff00;">深度: B<span id="floor">1</span></div>
+        </div>
+
+        <canvas id="dungeonCanvas"></canvas>
+
+        <div class="controls-hint">
+            [WASD] 移動 | [空白鍵] 衝刺 | [左鍵] 背刺暗殺 | [E] 使用道具
+        </div>
+    </div>
+    <script src="game code.js"></script>
+</body>
+</html>
